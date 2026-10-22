@@ -1,0 +1,1255 @@
+import React, { useState, useEffect, useMemo } from 'react';
+import { Plus, Trash2, Save, FolderOpen, Download, Copy, Check, X, Info, RefreshCw, ChevronDown, ChevronUp } from 'lucide-react';
+
+// ============================================================
+// YUU Brand Tokens
+// ============================================================
+const C = {
+  navy: '#170055',
+  navyDeep: '#0E0036',
+  orange: '#FE6500',
+  orangeSoft: '#FFE2D0',
+  purpleLight: '#EBE5FC',
+  purpleMid: '#DCD3FA',
+  purpleAccent: '#B4A1FF',
+  purpleDeep: '#6B4FCF',
+  border: '#E0DAF3',
+  surface: '#FAF8FF',
+  white: '#FFFFFF',
+  textPrimary: '#170055',
+  textMuted: '#5B4F87',
+  success: '#0F7B3F',
+  successBg: '#E6F4ED',
+  warn: '#B85C00',
+  warnBg: '#FFF1E0',
+  error: '#A52034',
+  errorBg: '#FBE9EC',
+};
+
+const FONT = 'Verdana, Geneva, sans-serif';
+
+// ============================================================
+// Product Catalog (from official pricing menu)
+// ============================================================
+const PRODUCTS = [
+  {
+    id: 'curriculum_only',
+    name: 'Curriculum Only',
+    category: 'Content & Training',
+    desc: 'Licensed access to curriculum, no facilitation',
+    pricing: { low: 1000, target: 3000, stretch: 5000 },
+    unit: 'flat',
+    unitLabel: 'flat fee',
+    deliveryCost: { low: 750, high: 2500 },
+  },
+  {
+    id: 'curriculum_train_trainer',
+    name: 'Curriculum + Train the Trainer',
+    category: 'Content & Training',
+    desc: 'Curriculum plus training partner team to deliver',
+    pricing: { low: 4500, target: 9750, stretch: 15000 },
+    unit: 'cohort',
+    unitLabel: 'per cohort',
+    deliveryCost: { low: 2000, high: 5000 },
+  },
+  {
+    id: 'curriculum_facilitator',
+    name: 'Curriculum + Facilitator',
+    category: 'Content & Training',
+    desc: 'YUU delivers curriculum with facilitator',
+    pricing: { low: 2000, target: 8500, stretch: 15000 },
+    unit: 'participant',
+    unitLabel: 'per participant',
+    deliveryCost: { low: 1500, high: 4500 },
+  },
+  {
+    id: 'direct_talent_placement',
+    name: 'Direct Talent Placement',
+    category: 'Talent Placement',
+    desc: 'Match and place Career Connect completers',
+    pricing: { low: 6200, target: 8000, stretch: 12000 },
+    unit: 'placement',
+    unitLabel: 'per placement',
+    salaryPercent: { low: 10, target: 13, stretch: 15 },
+    deliveryCost: { low: 500, high: 2000 },
+  },
+  {
+    id: 'placement_success_onboarding',
+    name: 'Placement Success: 90-Day Onboarding Coach',
+    category: 'Retention & Coaching',
+    desc: '90-day onboarding support for newly placed hires',
+    pricing: { low: 5000, target: 6500, stretch: 8000 },
+    unit: 'placement',
+    unitLabel: 'per placement',
+    deliveryCost: { low: 2000, high: 4500 },
+  },
+  {
+    id: 'placement_success_coaching',
+    name: 'Placement Success: Coaching (existing + new)',
+    category: 'Retention & Coaching',
+    desc: 'Coaching for incumbent talent and new hires',
+    pricing: { low: 5000, target: 6500, stretch: 8000 },
+    unit: 'participant',
+    unitLabel: 'per participant',
+    deliveryCost: { low: 2000, high: 4500 },
+  },
+  {
+    id: 'direct_plus_success',
+    name: 'Direct Placement + Placement Success (Bundle)',
+    category: 'Full Service',
+    desc: 'Combined direct placement with 90-day success support',
+    pricing: { low: 8000, target: 14000, stretch: 20000 },
+    unit: 'placement',
+    unitLabel: 'per placement',
+    deliveryCost: { low: 2500, high: 6500 },
+  },
+  {
+    id: 'intern_to_hire',
+    name: '90-Day Intern-to-Hire (WBE)',
+    category: 'Full Service',
+    desc: 'Work-based experience with conversion pathway',
+    pricing: { low: 17000, target: 22000, stretch: 28000 },
+    unit: 'participant',
+    unitLabel: 'per participant',
+    deliveryCost: { low: 4000, high: 10000 },
+    flags: ['stipend', 'drugTesting'],
+  },
+  {
+    id: 'custom_curriculum',
+    name: 'Custom Curriculum Build',
+    category: 'Content & Training',
+    desc: 'Partner-specific course or supplemental tech build',
+    pricing: { low: 10000, target: 25000, stretch: 50000 },
+    unit: 'flat',
+    unitLabel: 'one-time',
+    deliveryCost: { low: 5000, high: 20000 },
+  },
+];
+
+const CATEGORIES = ['Content & Training', 'Talent Placement', 'Retention & Coaching', 'Full Service'];
+
+// ============================================================
+// Default Staff Salary Tiers (loaded with fringe, NY market)
+// Derived from LRP avg of $178K/FTE loaded across 20-staff model
+// ============================================================
+const STAFF_TIERS = {
+  coordinator: { label: 'Coordinator / Associate', defaultSalary: 85000 },
+  specialist: { label: 'Specialist', defaultSalary: 115000 },
+  senior_specialist: { label: 'Senior Specialist / Coach', defaultSalary: 145000 },
+  manager: { label: 'Manager / Lead', defaultSalary: 175000 },
+  senior_manager: { label: 'Senior Manager', defaultSalary: 210000 },
+  director: { label: 'Director', defaultSalary: 250000 },
+};
+
+const STAFF_TIER_OPTIONS = Object.entries(STAFF_TIERS).map(([id, v]) => ({ id, ...v }));
+
+// ============================================================
+// Default Variable Cost Assumptions
+// ============================================================
+const DEFAULT_VARIABLE_COSTS = {
+  stipend: { enabled: false, weekly: 400, weeks: 12 },
+  drugTesting: { enabled: false, perPlacement: 75 },
+  lms: { enabled: true, perLearner: 100 },
+  technology: { enabled: true, flat: 2000 },
+  techBuild: { enabled: false, flat: 0 },
+  travel: { enabled: false, flat: 0 },
+  catering: { enabled: false, flat: 0 },
+  printing: { enabled: false, flat: 0 },
+  drugScreening: { enabled: false, perPlacement: 0 },
+  staffTraining: { enabled: false, flat: 0 },
+  other: { enabled: false, flat: 0, label: 'Other / Misc' },
+};
+
+// ============================================================
+// Helpers
+// ============================================================
+const fmt$ = (n) => {
+  if (n === null || n === undefined || isNaN(n)) return '$0';
+  const sign = n < 0 ? '-' : '';
+  const abs = Math.abs(n);
+  if (abs >= 1000000) return `${sign}$${(abs / 1000000).toFixed(2)}M`;
+  if (abs >= 10000) return `${sign}$${Math.round(abs).toLocaleString()}`;
+  return `${sign}$${Math.round(abs).toLocaleString()}`;
+};
+
+const fmt$Full = (n) => {
+  if (n === null || n === undefined || isNaN(n)) return '$0';
+  return `$${Math.round(n).toLocaleString()}`;
+};
+
+const fmtPct = (n) => {
+  if (n === null || n === undefined || isNaN(n) || !isFinite(n)) return '—';
+  return `${Math.round(n * 10) / 10}%`;
+};
+
+const newScenarioId = () => `s_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+
+// ============================================================
+// Main Component
+// ============================================================
+export default function CareerConnectCalculator() {
+  // Partner setup
+  const [partnerName, setPartnerName] = useState('');
+  const [industry, setIndustry] = useState('');
+  const [numParticipants, setNumParticipants] = useState(20);
+  const [numPlacements, setNumPlacements] = useState(15);
+  const [avgFirstYearSalary, setAvgFirstYearSalary] = useState(53000);
+
+  // Products
+  const [selectedProducts, setSelectedProducts] = useState({});
+
+  // Staffing
+  const [staffRoles, setStaffRoles] = useState([
+    { id: 1, label: 'Program Lead', tier: 'manager', salary: 175000, fte: 0.2 },
+    { id: 2, label: 'Coach / Facilitator', tier: 'senior_specialist', salary: 145000, fte: 0.3 },
+  ]);
+  const [nextStaffId, setNextStaffId] = useState(3);
+
+  // Variable costs
+  const [variableCosts, setVariableCosts] = useState(DEFAULT_VARIABLE_COSTS);
+
+  // Overhead
+  const [includeOverhead, setIncludeOverhead] = useState(true);
+  const [overheadRate, setOverheadRate] = useState(30);
+
+  // Pricing tier selection
+  const [pricingTier, setPricingTier] = useState('target');
+  const [customPricing, setCustomPricing] = useState({});
+
+  // Saved scenarios
+  const [savedScenarios, setSavedScenarios] = useState([]);
+  const [currentScenarioId, setCurrentScenarioId] = useState(null);
+  const [showSaved, setShowSaved] = useState(false);
+  const [saveStatus, setSaveStatus] = useState(null);
+
+  // UI state
+  const [showAssumptions, setShowAssumptions] = useState(false);
+  const [activeTab, setActiveTab] = useState('configure');
+
+  // ----------------------------------------------------------
+  // Load saved scenarios on mount
+  // ----------------------------------------------------------
+  useEffect(() => {
+    loadSavedScenarios();
+  }, []);
+
+  const loadSavedScenarios = async () => {
+    try {
+      const listResult = await window.storage.list('cc_scenario:');
+      if (!listResult || !listResult.keys) return;
+      const scenarios = [];
+      for (const key of listResult.keys) {
+        try {
+          const r = await window.storage.get(key);
+          if (r && r.value) scenarios.push(JSON.parse(r.value));
+        } catch (e) { /* skip */ }
+      }
+      scenarios.sort((a, b) => (b.savedAt || 0) - (a.savedAt || 0));
+      setSavedScenarios(scenarios);
+    } catch (e) {
+      console.log('Could not load saved scenarios', e);
+    }
+  };
+
+  const saveCurrentScenario = async () => {
+    if (!partnerName.trim()) {
+      setSaveStatus({ type: 'error', msg: 'Add a partner name first.' });
+      setTimeout(() => setSaveStatus(null), 3000);
+      return;
+    }
+    const id = currentScenarioId || newScenarioId();
+    const scenario = {
+      id,
+      partnerName,
+      industry,
+      numParticipants,
+      numPlacements,
+      avgFirstYearSalary,
+      selectedProducts,
+      staffRoles,
+      variableCosts,
+      includeOverhead,
+      overheadRate,
+      pricingTier,
+      customPricing,
+      savedAt: Date.now(),
+    };
+    try {
+      await window.storage.set(`cc_scenario:${id}`, JSON.stringify(scenario));
+      setCurrentScenarioId(id);
+      setSaveStatus({ type: 'ok', msg: `Saved: ${partnerName}` });
+      setTimeout(() => setSaveStatus(null), 3000);
+      loadSavedScenarios();
+    } catch (e) {
+      setSaveStatus({ type: 'error', msg: 'Save failed.' });
+      setTimeout(() => setSaveStatus(null), 3000);
+    }
+  };
+
+  const loadScenario = (s) => {
+    setPartnerName(s.partnerName || '');
+    setIndustry(s.industry || '');
+    setNumParticipants(s.numParticipants || 20);
+    setNumPlacements(s.numPlacements || 15);
+    setAvgFirstYearSalary(s.avgFirstYearSalary || 53000);
+    setSelectedProducts(s.selectedProducts || {});
+    setStaffRoles(s.staffRoles || []);
+    setVariableCosts(s.variableCosts || DEFAULT_VARIABLE_COSTS);
+    setIncludeOverhead(s.includeOverhead !== undefined ? s.includeOverhead : true);
+    setOverheadRate(s.overheadRate || 30);
+    setPricingTier(s.pricingTier || 'target');
+    setCustomPricing(s.customPricing || {});
+    setCurrentScenarioId(s.id);
+    setShowSaved(false);
+    const maxId = (s.staffRoles || []).reduce((m, r) => Math.max(m, r.id || 0), 0);
+    setNextStaffId(maxId + 1);
+  };
+
+  const deleteScenario = async (id) => {
+    try {
+      await window.storage.delete(`cc_scenario:${id}`);
+      if (currentScenarioId === id) setCurrentScenarioId(null);
+      loadSavedScenarios();
+    } catch (e) { /* */ }
+  };
+
+  const newScenario = () => {
+    setPartnerName('');
+    setIndustry('');
+    setNumParticipants(20);
+    setNumPlacements(15);
+    setAvgFirstYearSalary(53000);
+    setSelectedProducts({});
+    setStaffRoles([
+      { id: 1, label: 'Program Lead', tier: 'manager', salary: 175000, fte: 0.2 },
+      { id: 2, label: 'Coach / Facilitator', tier: 'senior_specialist', salary: 145000, fte: 0.3 },
+    ]);
+    setNextStaffId(3);
+    setVariableCosts(DEFAULT_VARIABLE_COSTS);
+    setIncludeOverhead(true);
+    setOverheadRate(30);
+    setPricingTier('target');
+    setCustomPricing({});
+    setCurrentScenarioId(null);
+    setShowSaved(false);
+  };
+
+  // ----------------------------------------------------------
+  // Product handlers
+  // ----------------------------------------------------------
+  const toggleProduct = (id) => {
+    setSelectedProducts(prev => {
+      const next = { ...prev };
+      if (next[id]) {
+        delete next[id];
+      } else {
+        const product = PRODUCTS.find(p => p.id === id);
+        next[id] = {
+          quantity: product.unit === 'placement' ? numPlacements
+            : product.unit === 'participant' ? numParticipants
+            : 1,
+          pricingMode: id === 'direct_talent_placement' ? 'percent' : 'flat',
+        };
+        // Auto-enable WBE flags
+        if (product.flags?.includes('stipend')) {
+          setVariableCosts(v => ({ ...v, stipend: { ...v.stipend, enabled: true }}));
+        }
+        if (product.flags?.includes('drugTesting')) {
+          setVariableCosts(v => ({ ...v, drugTesting: { ...v.drugTesting, enabled: true }}));
+        }
+      }
+      return next;
+    });
+  };
+
+  const updateProductQty = (id, qty) => {
+    setSelectedProducts(prev => ({ ...prev, [id]: { ...prev[id], quantity: Math.max(0, qty) }}));
+  };
+
+  const updateProductPricingMode = (id, mode) => {
+    setSelectedProducts(prev => ({ ...prev, [id]: { ...prev[id], pricingMode: mode }}));
+  };
+
+  // ----------------------------------------------------------
+  // Staff handlers
+  // ----------------------------------------------------------
+  const addStaffRole = () => {
+    setStaffRoles(prev => [...prev, {
+      id: nextStaffId,
+      label: 'New Role',
+      tier: 'specialist',
+      salary: STAFF_TIERS.specialist.defaultSalary,
+      fte: 0.1,
+    }]);
+    setNextStaffId(n => n + 1);
+  };
+
+  const updateStaffRole = (id, field, value) => {
+    setStaffRoles(prev => prev.map(r => {
+      if (r.id !== id) return r;
+      const updated = { ...r, [field]: value };
+      if (field === 'tier') updated.salary = STAFF_TIERS[value].defaultSalary;
+      return updated;
+    }));
+  };
+
+  const removeStaffRole = (id) => {
+    setStaffRoles(prev => prev.filter(r => r.id !== id));
+  };
+
+  // ----------------------------------------------------------
+  // Variable cost handlers
+  // ----------------------------------------------------------
+  const updateVarCost = (key, field, value) => {
+    setVariableCosts(prev => ({ ...prev, [key]: { ...prev[key], [field]: value }}));
+  };
+
+  // ----------------------------------------------------------
+  // Calculations
+  // ----------------------------------------------------------
+  const calc = useMemo(() => {
+    // Staff cost
+    const staffCost = staffRoles.reduce((sum, r) => sum + (r.salary * r.fte), 0);
+
+    // Variable costs
+    const vc = variableCosts;
+    const stipendCost = vc.stipend.enabled
+      ? vc.stipend.weekly * vc.stipend.weeks * numParticipants : 0;
+    const drugTestCost = vc.drugTesting.enabled
+      ? vc.drugTesting.perPlacement * numPlacements : 0;
+    const lmsCost = vc.lms.enabled
+      ? vc.lms.perLearner * numParticipants : 0;
+    const techCost = vc.technology.enabled ? vc.technology.flat : 0;
+    const techBuildCost = vc.techBuild.enabled ? vc.techBuild.flat : 0;
+    const travelCost = vc.travel.enabled ? vc.travel.flat : 0;
+    const cateringCost = vc.catering.enabled ? vc.catering.flat : 0;
+    const printingCost = vc.printing.enabled ? vc.printing.flat : 0;
+    const staffTrainingCost = vc.staffTraining.enabled ? vc.staffTraining.flat : 0;
+    const otherCost = vc.other.enabled ? vc.other.flat : 0;
+
+    const variableTotal = stipendCost + drugTestCost + lmsCost + techCost + techBuildCost
+      + travelCost + cateringCost + printingCost + staffTrainingCost + otherCost;
+
+    const directCost = staffCost + variableTotal;
+    const overheadCost = includeOverhead ? directCost * (overheadRate / 100) : 0;
+    const totalCost = directCost + overheadCost;
+
+    // Revenue at each tier
+    const calcRevenue = (tier) => {
+      let rev = 0;
+      Object.entries(selectedProducts).forEach(([pid, config]) => {
+        const product = PRODUCTS.find(p => p.id === pid);
+        if (!product) return;
+        const qty = config.quantity || 0;
+        // Allow custom pricing override
+        const customKey = `${pid}_${tier}`;
+        if (customPricing[customKey] !== undefined && customPricing[customKey] !== '') {
+          rev += parseFloat(customPricing[customKey]) * (product.unit === 'flat' ? 1 : qty);
+          return;
+        }
+        // Direct Talent Placement: % of salary option
+        if (pid === 'direct_talent_placement' && config.pricingMode === 'percent') {
+          const pct = product.salaryPercent[tier] / 100;
+          rev += avgFirstYearSalary * pct * qty;
+          return;
+        }
+        // Standard pricing
+        const price = product.pricing[tier];
+        if (product.unit === 'flat') rev += price;
+        else rev += price * qty;
+      });
+      return rev;
+    };
+
+    const revLow = calcRevenue('low');
+    const revTarget = calcRevenue('target');
+    const revStretch = calcRevenue('stretch');
+
+    const selectedRev = pricingTier === 'low' ? revLow
+      : pricingTier === 'stretch' ? revStretch : revTarget;
+
+    const margin = selectedRev - totalCost;
+    const marginPct = selectedRev > 0 ? (margin / selectedRev) * 100 : 0;
+
+    const directMargin = selectedRev - directCost;
+    const directMarginPct = selectedRev > 0 ? (directMargin / selectedRev) * 100 : 0;
+
+    const breakevenPerParticipant = numParticipants > 0 ? totalCost / numParticipants : 0;
+    const costPerParticipant = numParticipants > 0 ? totalCost / numParticipants : 0;
+    const revPerParticipant = numParticipants > 0 ? selectedRev / numParticipants : 0;
+
+    return {
+      staffCost,
+      variableTotal,
+      directCost,
+      overheadCost,
+      totalCost,
+      breakdown: {
+        stipendCost, drugTestCost, lmsCost, techCost, techBuildCost,
+        travelCost, cateringCost, printingCost, staffTrainingCost, otherCost,
+      },
+      revLow, revTarget, revStretch, selectedRev,
+      margin, marginPct, directMargin, directMarginPct,
+      breakevenPerParticipant, costPerParticipant, revPerParticipant,
+    };
+  }, [staffRoles, variableCosts, numParticipants, numPlacements, avgFirstYearSalary,
+      selectedProducts, includeOverhead, overheadRate, pricingTier, customPricing]);
+
+  // ----------------------------------------------------------
+  // Export
+  // ----------------------------------------------------------
+  const exportSummary = () => {
+    const lines = [];
+    lines.push(`CAREER CONNECT PRICING SCENARIO`);
+    lines.push(`═══════════════════════════════════════════════`);
+    lines.push(`Partner: ${partnerName || '[Unnamed]'}`);
+    if (industry) lines.push(`Industry: ${industry}`);
+    lines.push(`Participants: ${numParticipants}  |  Placements: ${numPlacements}`);
+    lines.push(`Avg First-Year Salary (placement basis): ${fmt$Full(avgFirstYearSalary)}`);
+    lines.push('');
+    lines.push(`SELECTED PRODUCTS`);
+    lines.push(`───────────────────────────────────────────────`);
+    Object.entries(selectedProducts).forEach(([pid, config]) => {
+      const p = PRODUCTS.find(pp => pp.id === pid);
+      if (!p) return;
+      lines.push(`• ${p.name}  (qty: ${config.quantity})`);
+    });
+    lines.push('');
+    lines.push(`COST OF DELIVERY`);
+    lines.push(`───────────────────────────────────────────────`);
+    lines.push(`Staff (loaded):              ${fmt$Full(calc.staffCost)}`);
+    lines.push(`Variable costs:              ${fmt$Full(calc.variableTotal)}`);
+    lines.push(`Direct cost:                 ${fmt$Full(calc.directCost)}`);
+    if (includeOverhead) lines.push(`Overhead (${overheadRate}%):              ${fmt$Full(calc.overheadCost)}`);
+    lines.push(`TOTAL COST:                  ${fmt$Full(calc.totalCost)}`);
+    lines.push(`Cost per participant:        ${fmt$Full(calc.costPerParticipant)}`);
+    lines.push('');
+    lines.push(`SUGGESTED PRICING RANGE`);
+    lines.push(`───────────────────────────────────────────────`);
+    lines.push(`Low:        ${fmt$Full(calc.revLow)}    margin: ${fmt$Full(calc.revLow - calc.totalCost)} (${fmtPct(calc.revLow > 0 ? ((calc.revLow - calc.totalCost) / calc.revLow * 100) : 0)})`);
+    lines.push(`Target:     ${fmt$Full(calc.revTarget)}    margin: ${fmt$Full(calc.revTarget - calc.totalCost)} (${fmtPct(calc.revTarget > 0 ? ((calc.revTarget - calc.totalCost) / calc.revTarget * 100) : 0)})`);
+    lines.push(`Stretch:    ${fmt$Full(calc.revStretch)}    margin: ${fmt$Full(calc.revStretch - calc.totalCost)} (${fmtPct(calc.revStretch > 0 ? ((calc.revStretch - calc.totalCost) / calc.revStretch * 100) : 0)})`);
+    lines.push('');
+    lines.push(`SELECTED: ${pricingTier.toUpperCase()} TIER`);
+    lines.push(`───────────────────────────────────────────────`);
+    lines.push(`Revenue:               ${fmt$Full(calc.selectedRev)}`);
+    lines.push(`Margin:                ${fmt$Full(calc.margin)} (${fmtPct(calc.marginPct)})`);
+    lines.push(`Revenue per participant: ${fmt$Full(calc.revPerParticipant)}`);
+    lines.push('');
+    lines.push(`Generated ${new Date().toLocaleString()}`);
+    const text = lines.join('\n');
+    navigator.clipboard.writeText(text).then(() => {
+      setSaveStatus({ type: 'ok', msg: 'Summary copied to clipboard' });
+      setTimeout(() => setSaveStatus(null), 3000);
+    });
+  };
+
+  // ----------------------------------------------------------
+  // Render
+  // ----------------------------------------------------------
+  const selectedProductCount = Object.keys(selectedProducts).length;
+
+  return (
+    <div style={{ fontFamily: FONT, color: C.textPrimary, background: C.surface, minHeight: '100vh' }}>
+      {/* Header */}
+      <header style={{ background: C.navy, color: 'white', padding: '20px 28px', borderBottom: `3px solid ${C.orange}` }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 16 }}>
+          <div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+              <div style={{ width: 6, height: 28, background: C.orange, borderRadius: 1 }} />
+              <h1 style={{ margin: 0, fontSize: 22, fontWeight: 700, letterSpacing: 0.2 }}>
+                Career Connect Pricing Calculator
+              </h1>
+            </div>
+            <p style={{ margin: '6px 0 0 18px', fontSize: 12, opacity: 0.75, fontWeight: 400 }}>
+              Build partner-specific scenarios. Compare cost, pricing, and margin.
+            </p>
+          </div>
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            <button onClick={() => setShowSaved(!showSaved)} style={btnSecondaryStyle}>
+              <FolderOpen size={14} /> Saved ({savedScenarios.length})
+            </button>
+            <button onClick={newScenario} style={btnSecondaryStyle}>
+              <RefreshCw size={14} /> New
+            </button>
+            <button onClick={saveCurrentScenario} style={btnPrimaryStyle}>
+              <Save size={14} /> Save Scenario
+            </button>
+          </div>
+        </div>
+        {saveStatus && (
+          <div style={{
+            marginTop: 12, padding: '8px 12px', borderRadius: 6, fontSize: 13,
+            background: saveStatus.type === 'ok' ? C.successBg : C.errorBg,
+            color: saveStatus.type === 'ok' ? C.success : C.error,
+            display: 'inline-flex', alignItems: 'center', gap: 8,
+          }}>
+            {saveStatus.type === 'ok' ? <Check size={14} /> : <X size={14} />}
+            {saveStatus.msg}
+          </div>
+        )}
+      </header>
+
+      {/* Saved Scenarios Drawer */}
+      {showSaved && (
+        <div style={{ background: C.purpleLight, borderBottom: `1px solid ${C.border}`, padding: '16px 28px' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+            <h3 style={{ margin: 0, fontSize: 14, color: C.navy, fontWeight: 700 }}>Saved Scenarios</h3>
+            <button onClick={() => setShowSaved(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: C.navy }}>
+              <X size={18} />
+            </button>
+          </div>
+          {savedScenarios.length === 0 ? (
+            <p style={{ fontSize: 13, color: C.textMuted, margin: 0 }}>No saved scenarios yet. Save one to compare later.</p>
+          ) : (
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: 10 }}>
+              {savedScenarios.map(s => (
+                <div key={s.id} style={{
+                  background: 'white', border: `1px solid ${C.border}`, borderRadius: 6, padding: 12,
+                  display: 'flex', flexDirection: 'column', gap: 6,
+                }}>
+                  <div style={{ fontWeight: 700, fontSize: 13, color: C.navy }}>{s.partnerName}</div>
+                  {s.industry && <div style={{ fontSize: 11, color: C.textMuted }}>{s.industry}</div>}
+                  <div style={{ fontSize: 11, color: C.textMuted }}>
+                    {s.numParticipants} participants · {Object.keys(s.selectedProducts || {}).length} products
+                  </div>
+                  <div style={{ fontSize: 10, color: C.textMuted }}>
+                    {new Date(s.savedAt).toLocaleDateString()}
+                  </div>
+                  <div style={{ display: 'flex', gap: 6, marginTop: 4 }}>
+                    <button onClick={() => loadScenario(s)} style={{ ...btnGhostStyle, flex: 1 }}>Load</button>
+                    <button onClick={() => deleteScenario(s.id)} style={{ ...btnGhostStyle, color: C.error }}>
+                      <Trash2 size={12} />
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Main Layout */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) 380px', gap: 0, alignItems: 'start' }}>
+        {/* Configuration Column */}
+        <div style={{ padding: '24px 28px', minWidth: 0 }}>
+          {/* Partner Setup */}
+          <Section title="1. Partner Setup">
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 12 }}>
+              <Field label="Partner Name">
+                <input type="text" value={partnerName} onChange={e => setPartnerName(e.target.value)}
+                  placeholder="e.g. Memorial Healthcare" style={inputStyle} />
+              </Field>
+              <Field label="Industry">
+                <input type="text" value={industry} onChange={e => setIndustry(e.target.value)}
+                  placeholder="e.g. Healthcare" style={inputStyle} />
+              </Field>
+              <Field label="# Participants">
+                <input type="number" value={numParticipants} onChange={e => setNumParticipants(Number(e.target.value) || 0)}
+                  min="0" style={inputStyle} />
+              </Field>
+              <Field label="# Placements">
+                <input type="number" value={numPlacements} onChange={e => setNumPlacements(Number(e.target.value) || 0)}
+                  min="0" style={inputStyle} />
+              </Field>
+              <Field label="Avg First-Year Salary" hint="Used for % of salary pricing">
+                <input type="number" value={avgFirstYearSalary} onChange={e => setAvgFirstYearSalary(Number(e.target.value) || 0)}
+                  min="0" step="1000" style={inputStyle} />
+              </Field>
+            </div>
+          </Section>
+
+          {/* Product Selection */}
+          <Section title="2. Select Products" badge={`${selectedProductCount} selected`}>
+            {CATEGORIES.map(cat => (
+              <div key={cat} style={{ marginBottom: 16 }}>
+                <div style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: 1, color: C.textMuted, marginBottom: 8, fontWeight: 700 }}>
+                  {cat}
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                  {PRODUCTS.filter(p => p.category === cat).map(p => {
+                    const selected = !!selectedProducts[p.id];
+                    return (
+                      <div key={p.id} style={{
+                        border: `1px solid ${selected ? C.purpleAccent : C.border}`,
+                        background: selected ? C.purpleLight : 'white',
+                        borderRadius: 8, padding: 12, transition: 'all 0.15s',
+                      }}>
+                        <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12 }}>
+                          <input type="checkbox" checked={selected} onChange={() => toggleProduct(p.id)}
+                            style={{ marginTop: 2, accentColor: C.navy, cursor: 'pointer', width: 16, height: 16 }} />
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 8, flexWrap: 'wrap' }}>
+                              <div style={{ fontWeight: 700, fontSize: 13, color: C.navy }}>{p.name}</div>
+                              <div style={{ fontSize: 11, color: C.textMuted }}>
+                                {p.id === 'direct_talent_placement'
+                                  ? `${fmt$(p.pricing.low)}-${fmt$(p.pricing.stretch)} or ${p.salaryPercent.low}-${p.salaryPercent.stretch}% salary`
+                                  : `${fmt$(p.pricing.low)} - ${fmt$(p.pricing.stretch)} ${p.unitLabel}`
+                                }
+                              </div>
+                            </div>
+                            <div style={{ fontSize: 12, color: C.textMuted, marginTop: 2 }}>{p.desc}</div>
+
+                            {selected && (
+                              <div style={{ marginTop: 10, display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+                                {p.unit !== 'flat' && (
+                                  <label style={{ fontSize: 12, display: 'flex', alignItems: 'center', gap: 6 }}>
+                                    Qty:
+                                    <input type="number" min="0" value={selectedProducts[p.id].quantity}
+                                      onChange={e => updateProductQty(p.id, Number(e.target.value) || 0)}
+                                      style={{ ...inputStyle, width: 70, padding: '4px 6px' }} />
+                                  </label>
+                                )}
+                                {p.id === 'direct_talent_placement' && (
+                                  <div style={{ display: 'flex', gap: 4, background: 'white', borderRadius: 6, padding: 2, border: `1px solid ${C.border}` }}>
+                                    {['flat', 'percent'].map(mode => (
+                                      <button key={mode} onClick={() => updateProductPricingMode(p.id, mode)}
+                                        style={{
+                                          border: 'none', cursor: 'pointer', padding: '4px 10px', fontSize: 11,
+                                          borderRadius: 4, fontWeight: 600,
+                                          background: selectedProducts[p.id].pricingMode === mode ? C.navy : 'transparent',
+                                          color: selectedProducts[p.id].pricingMode === mode ? 'white' : C.textMuted,
+                                        }}>
+                                        {mode === 'flat' ? 'Flat $' : '% Salary'}
+                                      </button>
+                                    ))}
+                                  </div>
+                                )}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            ))}
+          </Section>
+
+          {/* Staffing */}
+          <Section title="3. Staffing" hint="Allocate FTE to this deal. Loaded salary = base + fringe.">
+            <div style={{ background: 'white', borderRadius: 8, border: `1px solid ${C.border}`, overflow: 'hidden' }}>
+              <div style={{
+                display: 'grid', gridTemplateColumns: '1.5fr 1.5fr 1fr 0.7fr 40px',
+                gap: 8, padding: '10px 12px', background: C.purpleLight, fontSize: 11,
+                textTransform: 'uppercase', letterSpacing: 0.5, fontWeight: 700, color: C.navy,
+              }}>
+                <div>Role Label</div>
+                <div>Tier</div>
+                <div>Loaded Salary</div>
+                <div>FTE</div>
+                <div></div>
+              </div>
+              {staffRoles.map(role => (
+                <div key={role.id} style={{
+                  display: 'grid', gridTemplateColumns: '1.5fr 1.5fr 1fr 0.7fr 40px',
+                  gap: 8, padding: '8px 12px', alignItems: 'center', borderTop: `1px solid ${C.border}`,
+                }}>
+                  <input type="text" value={role.label} onChange={e => updateStaffRole(role.id, 'label', e.target.value)}
+                    style={{ ...inputStyle, padding: '6px 8px' }} />
+                  <select value={role.tier} onChange={e => updateStaffRole(role.id, 'tier', e.target.value)}
+                    style={{ ...inputStyle, padding: '6px 8px' }}>
+                    {STAFF_TIER_OPTIONS.map(t => (
+                      <option key={t.id} value={t.id}>{t.label}</option>
+                    ))}
+                  </select>
+                  <input type="number" value={role.salary} step="5000"
+                    onChange={e => updateStaffRole(role.id, 'salary', Number(e.target.value) || 0)}
+                    style={{ ...inputStyle, padding: '6px 8px' }} />
+                  <input type="number" value={role.fte} step="0.05" min="0" max="1"
+                    onChange={e => updateStaffRole(role.id, 'fte', Number(e.target.value) || 0)}
+                    style={{ ...inputStyle, padding: '6px 8px' }} />
+                  <button onClick={() => removeStaffRole(role.id)}
+                    style={{ background: 'none', border: 'none', cursor: 'pointer', color: C.error, padding: 4 }}>
+                    <Trash2 size={14} />
+                  </button>
+                </div>
+              ))}
+              <div style={{ padding: '8px 12px', borderTop: `1px solid ${C.border}`, background: C.surface }}>
+                <button onClick={addStaffRole} style={btnGhostStyle}>
+                  <Plus size={14} /> Add Role
+                </button>
+              </div>
+              <div style={{
+                display: 'flex', justifyContent: 'space-between', padding: '12px',
+                background: C.navy, color: 'white', fontWeight: 700, fontSize: 13,
+              }}>
+                <span>Total Staff Cost (allocated)</span>
+                <span style={{ color: C.orange }}>{fmt$Full(calc.staffCost)}</span>
+              </div>
+            </div>
+          </Section>
+
+          {/* Variable Costs */}
+          <Section title="4. Variable Costs">
+            <div style={{ display: 'grid', gap: 8 }}>
+              <CostRow label="Student Stipend (WBE / paid training)"
+                enabled={variableCosts.stipend.enabled}
+                onToggle={v => updateVarCost('stipend', 'enabled', v)}
+                computed={variableCosts.stipend.enabled
+                  ? variableCosts.stipend.weekly * variableCosts.stipend.weeks * numParticipants : 0}
+                hint={`${fmt$(variableCosts.stipend.weekly)}/wk × ${variableCosts.stipend.weeks}wk × ${numParticipants} = `}>
+                <div style={{ display: 'flex', gap: 8 }}>
+                  <NumberMini value={variableCosts.stipend.weekly}
+                    onChange={v => updateVarCost('stipend', 'weekly', v)} label="$/wk" step={25} />
+                  <NumberMini value={variableCosts.stipend.weeks}
+                    onChange={v => updateVarCost('stipend', 'weeks', v)} label="weeks" />
+                </div>
+              </CostRow>
+
+              <CostRow label="Drug Testing & Screening"
+                enabled={variableCosts.drugTesting.enabled}
+                onToggle={v => updateVarCost('drugTesting', 'enabled', v)}
+                computed={variableCosts.drugTesting.enabled
+                  ? variableCosts.drugTesting.perPlacement * numPlacements : 0}
+                hint={`${fmt$(variableCosts.drugTesting.perPlacement)}/placement × ${numPlacements} = `}>
+                <NumberMini value={variableCosts.drugTesting.perPlacement}
+                  onChange={v => updateVarCost('drugTesting', 'perPlacement', v)} label="$/placement" step={25} />
+              </CostRow>
+
+              <CostRow label="LMS / Learning Platform"
+                enabled={variableCosts.lms.enabled}
+                onToggle={v => updateVarCost('lms', 'enabled', v)}
+                computed={variableCosts.lms.enabled ? variableCosts.lms.perLearner * numParticipants : 0}
+                hint={`${fmt$(variableCosts.lms.perLearner)}/learner × ${numParticipants} = `}>
+                <NumberMini value={variableCosts.lms.perLearner}
+                  onChange={v => updateVarCost('lms', 'perLearner', v)} label="$/learner" step={25} />
+              </CostRow>
+
+              <CostRow label="Technology & Tools"
+                enabled={variableCosts.technology.enabled}
+                onToggle={v => updateVarCost('technology', 'enabled', v)}
+                computed={variableCosts.technology.enabled ? variableCosts.technology.flat : 0}
+                hint="Flat allocation"
+                >
+                <NumberMini value={variableCosts.technology.flat}
+                  onChange={v => updateVarCost('technology', 'flat', v)} label="$" step={500} />
+              </CostRow>
+
+              <CostRow label="Custom Tech Course Build (one-time)"
+                enabled={variableCosts.techBuild.enabled}
+                onToggle={v => updateVarCost('techBuild', 'enabled', v)}
+                computed={variableCosts.techBuild.enabled ? variableCosts.techBuild.flat : 0}
+                hint="Partner-specific build">
+                <NumberMini value={variableCosts.techBuild.flat}
+                  onChange={v => updateVarCost('techBuild', 'flat', v)} label="$" step={1000} />
+              </CostRow>
+
+              <CostRow label="Travel"
+                enabled={variableCosts.travel.enabled}
+                onToggle={v => updateVarCost('travel', 'enabled', v)}
+                computed={variableCosts.travel.enabled ? variableCosts.travel.flat : 0}>
+                <NumberMini value={variableCosts.travel.flat}
+                  onChange={v => updateVarCost('travel', 'flat', v)} label="$" step={500} />
+              </CostRow>
+
+              <CostRow label="Catering & Event Rentals"
+                enabled={variableCosts.catering.enabled}
+                onToggle={v => updateVarCost('catering', 'enabled', v)}
+                computed={variableCosts.catering.enabled ? variableCosts.catering.flat : 0}>
+                <NumberMini value={variableCosts.catering.flat}
+                  onChange={v => updateVarCost('catering', 'flat', v)} label="$" step={250} />
+              </CostRow>
+
+              <CostRow label="Printing & Promotional Items"
+                enabled={variableCosts.printing.enabled}
+                onToggle={v => updateVarCost('printing', 'enabled', v)}
+                computed={variableCosts.printing.enabled ? variableCosts.printing.flat : 0}>
+                <NumberMini value={variableCosts.printing.flat}
+                  onChange={v => updateVarCost('printing', 'flat', v)} label="$" step={250} />
+              </CostRow>
+
+              <CostRow label="Staff Training"
+                enabled={variableCosts.staffTraining.enabled}
+                onToggle={v => updateVarCost('staffTraining', 'enabled', v)}
+                computed={variableCosts.staffTraining.enabled ? variableCosts.staffTraining.flat : 0}>
+                <NumberMini value={variableCosts.staffTraining.flat}
+                  onChange={v => updateVarCost('staffTraining', 'flat', v)} label="$" step={500} />
+              </CostRow>
+
+              <CostRow label="Other / Misc"
+                enabled={variableCosts.other.enabled}
+                onToggle={v => updateVarCost('other', 'enabled', v)}
+                computed={variableCosts.other.enabled ? variableCosts.other.flat : 0}>
+                <NumberMini value={variableCosts.other.flat}
+                  onChange={v => updateVarCost('other', 'flat', v)} label="$" step={500} />
+              </CostRow>
+
+              <div style={{
+                display: 'flex', justifyContent: 'space-between', padding: '12px',
+                background: C.navy, color: 'white', fontWeight: 700, fontSize: 13,
+                borderRadius: 6, marginTop: 4,
+              }}>
+                <span>Variable Cost Subtotal</span>
+                <span style={{ color: C.orange }}>{fmt$Full(calc.variableTotal)}</span>
+              </div>
+            </div>
+          </Section>
+
+          {/* Overhead */}
+          <Section title="5. Overhead Allocation" hint="Covers shared services not directly tied to this deal.">
+            <div style={{ display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap' }}>
+              <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13 }}>
+                <input type="checkbox" checked={includeOverhead} onChange={e => setIncludeOverhead(e.target.checked)}
+                  style={{ accentColor: C.navy, width: 16, height: 16, cursor: 'pointer' }} />
+                Include overhead in fully-loaded cost
+              </label>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <span style={{ fontSize: 12, color: C.textMuted }}>Rate:</span>
+                <input type="range" min="0" max="60" value={overheadRate}
+                  onChange={e => setOverheadRate(Number(e.target.value))}
+                  disabled={!includeOverhead}
+                  style={{ width: 140, accentColor: C.orange }} />
+                <span style={{ fontWeight: 700, color: C.navy, fontSize: 13, minWidth: 36 }}>{overheadRate}%</span>
+              </div>
+              <div style={{ fontSize: 12, color: C.textMuted }}>
+                = {fmt$Full(calc.overheadCost)} on {fmt$Full(calc.directCost)} direct
+              </div>
+            </div>
+          </Section>
+
+          {/* Pricing Strategy */}
+          <Section title="6. Pricing Strategy" hint="Choose your target tier or override per product below.">
+            <div style={{ display: 'flex', gap: 8, marginBottom: 12, flexWrap: 'wrap' }}>
+              {[
+                { id: 'low', label: 'Floor (Low)', rev: calc.revLow },
+                { id: 'target', label: 'Target', rev: calc.revTarget },
+                { id: 'stretch', label: 'Stretch', rev: calc.revStretch },
+              ].map(t => (
+                <button key={t.id} onClick={() => setPricingTier(t.id)}
+                  style={{
+                    flex: 1, minWidth: 130, padding: '12px',
+                    border: `2px solid ${pricingTier === t.id ? C.orange : C.border}`,
+                    background: pricingTier === t.id ? C.orangeSoft : 'white',
+                    borderRadius: 8, cursor: 'pointer', textAlign: 'left', fontFamily: FONT,
+                  }}>
+                  <div style={{ fontSize: 11, color: C.textMuted, textTransform: 'uppercase', letterSpacing: 0.5, fontWeight: 700 }}>{t.label}</div>
+                  <div style={{ fontSize: 18, fontWeight: 700, color: C.navy, marginTop: 4 }}>{fmt$(t.rev)}</div>
+                  <div style={{ fontSize: 11, color: C.textMuted, marginTop: 2 }}>
+                    margin: {fmt$(t.rev - calc.totalCost)} ({fmtPct(t.rev > 0 ? ((t.rev - calc.totalCost) / t.rev * 100) : 0)})
+                  </div>
+                </button>
+              ))}
+            </div>
+
+            {selectedProductCount > 0 && (
+              <details style={{ marginTop: 8 }}>
+                <summary style={{ cursor: 'pointer', fontSize: 12, color: C.purpleDeep, fontWeight: 700 }}>
+                  Override pricing per product (optional)
+                </summary>
+                <div style={{ marginTop: 12, display: 'grid', gap: 8 }}>
+                  {Object.entries(selectedProducts).map(([pid]) => {
+                    const p = PRODUCTS.find(pp => pp.id === pid);
+                    if (!p) return null;
+                    const key = `${pid}_${pricingTier}`;
+                    return (
+                      <div key={pid} style={{
+                        display: 'grid', gridTemplateColumns: '1fr 140px', gap: 8, alignItems: 'center',
+                        padding: '6px 8px', background: C.surface, borderRadius: 6,
+                      }}>
+                        <div style={{ fontSize: 12, color: C.navy }}>{p.name}</div>
+                        <input type="number"
+                          placeholder={`default: ${fmt$Full(p.pricing[pricingTier])}`}
+                          value={customPricing[key] || ''}
+                          onChange={e => setCustomPricing({ ...customPricing, [key]: e.target.value })}
+                          style={{ ...inputStyle, padding: '6px 8px', fontSize: 12 }} />
+                      </div>
+                    );
+                  })}
+                </div>
+              </details>
+            )}
+          </Section>
+
+          {/* Assumptions reference */}
+          <Section title="7. Reference Benchmarks" collapsible defaultCollapsed>
+            <div style={{ fontSize: 12, color: C.textMuted, lineHeight: 1.6 }}>
+              <div style={{ marginBottom: 8 }}>
+                <strong style={{ color: C.navy }}>LRP 2026 baseline:</strong> $4,204 cost per student across 1,500 served.
+                Program-level breakeven at $20,017 per placement (315 placements).
+              </div>
+              <div style={{ marginBottom: 8 }}>
+                <strong style={{ color: C.navy }}>Staffing reference:</strong> 20-FTE model at $3.56M loaded
+                (~$178K avg loaded per FTE). Adjust roles above to fit your partner deal.
+              </div>
+              <div style={{ marginBottom: 8 }}>
+                <strong style={{ color: C.navy }}>Pricing positioning:</strong> 10-15% talent matching fee
+                vs. 18-25% staffing agency standard. Below-market on placement, premium on full-service.
+              </div>
+              <div>
+                <strong style={{ color: C.navy }}>Proof points to anchor pricing:</strong> 90-93% employer
+                satisfaction, 72% graduate placement rate, ~30% earnings increase (PACE RCT).
+              </div>
+            </div>
+          </Section>
+        </div>
+
+        {/* ============================================================ */}
+        {/* Sticky Output Panel */}
+        {/* ============================================================ */}
+        <aside style={{
+          position: 'sticky', top: 0, alignSelf: 'start',
+          padding: '24px 24px 24px 0',
+          maxHeight: '100vh', overflowY: 'auto',
+        }}>
+          <div style={{
+            background: 'white', border: `1px solid ${C.border}`, borderRadius: 12,
+            overflow: 'hidden', boxShadow: '0 4px 16px rgba(23, 0, 85, 0.06)',
+          }}>
+            <div style={{ background: C.navy, color: 'white', padding: '16px 18px' }}>
+              <div style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: 1, opacity: 0.75, fontWeight: 700 }}>
+                Scenario Output
+              </div>
+              <div style={{ fontSize: 16, fontWeight: 700, marginTop: 4 }}>
+                {partnerName || 'Untitled Scenario'}
+              </div>
+            </div>
+
+            {/* Cost Breakdown */}
+            <div style={{ padding: 18, borderBottom: `1px solid ${C.border}` }}>
+              <div style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: 1, color: C.textMuted, fontWeight: 700, marginBottom: 10 }}>
+                Cost of Delivery
+              </div>
+              <Row label="Staff (loaded)" value={fmt$Full(calc.staffCost)} />
+              <Row label="Variable costs" value={fmt$Full(calc.variableTotal)} />
+              <Row label="Direct cost" value={fmt$Full(calc.directCost)} bold />
+              {includeOverhead && <Row label={`Overhead (${overheadRate}%)`} value={fmt$Full(calc.overheadCost)} muted />}
+              <div style={{
+                display: 'flex', justifyContent: 'space-between', alignItems: 'baseline',
+                paddingTop: 10, marginTop: 8, borderTop: `2px solid ${C.navy}`,
+              }}>
+                <span style={{ fontWeight: 700, color: C.navy, fontSize: 13 }}>Total Cost</span>
+                <span style={{ fontWeight: 700, color: C.navy, fontSize: 18 }}>{fmt$Full(calc.totalCost)}</span>
+              </div>
+              <div style={{ fontSize: 11, color: C.textMuted, marginTop: 4, textAlign: 'right' }}>
+                {fmt$Full(calc.costPerParticipant)} per participant
+              </div>
+            </div>
+
+            {/* Pricing Range */}
+            <div style={{ padding: 18, borderBottom: `1px solid ${C.border}`, background: C.purpleLight }}>
+              <div style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: 1, color: C.textMuted, fontWeight: 700, marginBottom: 10 }}>
+                Suggested Pricing Range
+              </div>
+              <PricingTierRow label="Floor" rev={calc.revLow} cost={calc.totalCost}
+                active={pricingTier === 'low'} />
+              <PricingTierRow label="Target" rev={calc.revTarget} cost={calc.totalCost}
+                active={pricingTier === 'target'} />
+              <PricingTierRow label="Stretch" rev={calc.revStretch} cost={calc.totalCost}
+                active={pricingTier === 'stretch'} />
+            </div>
+
+            {/* Margin Analysis */}
+            <div style={{ padding: 18 }}>
+              <div style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: 1, color: C.textMuted, fontWeight: 700, marginBottom: 10 }}>
+                Margin at {pricingTier.toUpperCase()} pricing
+              </div>
+              <Row label="Revenue" value={fmt$Full(calc.selectedRev)} bold />
+              <Row label="Total cost" value={`(${fmt$Full(calc.totalCost)})`} muted />
+              <div style={{
+                background: calc.margin >= 0 ? C.successBg : C.errorBg,
+                border: `1px solid ${calc.margin >= 0 ? C.success : C.error}20`,
+                borderRadius: 8, padding: 12, marginTop: 10,
+              }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
+                  <span style={{ fontSize: 12, color: calc.margin >= 0 ? C.success : C.error, fontWeight: 700 }}>
+                    {calc.margin >= 0 ? 'Margin' : 'Loss'}
+                  </span>
+                  <div style={{ textAlign: 'right' }}>
+                    <div style={{ fontWeight: 700, fontSize: 18, color: calc.margin >= 0 ? C.success : C.error }}>
+                      {fmt$Full(calc.margin)}
+                    </div>
+                    <div style={{ fontSize: 11, color: calc.margin >= 0 ? C.success : C.error }}>
+                      {fmtPct(calc.marginPct)} margin
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {includeOverhead && (
+                <div style={{ marginTop: 10, padding: 10, background: C.surface, borderRadius: 6, fontSize: 11, color: C.textMuted }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                    <span>Direct margin (excl. overhead)</span>
+                    <span style={{ fontWeight: 700, color: C.navy }}>
+                      {fmt$Full(calc.directMargin)} ({fmtPct(calc.directMarginPct)})
+                    </span>
+                  </div>
+                </div>
+              )}
+
+              <button onClick={exportSummary} style={{
+                ...btnPrimaryStyle, width: '100%', marginTop: 16, justifyContent: 'center',
+                padding: '10px',
+              }}>
+                <Copy size={14} /> Copy Summary
+              </button>
+            </div>
+          </div>
+
+          {/* Footer note */}
+          <div style={{ fontSize: 10, color: C.textMuted, marginTop: 12, padding: '0 8px', lineHeight: 1.5 }}>
+            Estimates for internal pricing discussion. Final pricing requires finance validation.
+          </div>
+        </aside>
+      </div>
+    </div>
+  );
+}
+
+// ============================================================
+// Sub-components
+// ============================================================
+function Section({ title, badge, hint, children, collapsible, defaultCollapsed }) {
+  const [collapsed, setCollapsed] = useState(!!defaultCollapsed);
+  return (
+    <section style={{
+      background: 'white', border: `1px solid ${C.border}`, borderRadius: 10,
+      marginBottom: 16, overflow: 'hidden',
+    }}>
+      <div style={{
+        padding: '14px 18px', borderBottom: collapsed ? 'none' : `1px solid ${C.border}`,
+        display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+        cursor: collapsible ? 'pointer' : 'default',
+      }} onClick={collapsible ? () => setCollapsed(c => !c) : undefined}>
+        <div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <h2 style={{ margin: 0, fontSize: 15, fontWeight: 700, color: C.navy }}>{title}</h2>
+            {badge && (
+              <span style={{
+                fontSize: 10, background: C.orange, color: 'white',
+                padding: '2px 8px', borderRadius: 10, fontWeight: 700, letterSpacing: 0.3,
+              }}>{badge}</span>
+            )}
+          </div>
+          {hint && <div style={{ fontSize: 12, color: C.textMuted, marginTop: 2 }}>{hint}</div>}
+        </div>
+        {collapsible && (collapsed ? <ChevronDown size={16} color={C.navy} /> : <ChevronUp size={16} color={C.navy} />)}
+      </div>
+      {!collapsed && <div style={{ padding: 18 }}>{children}</div>}
+    </section>
+  );
+}
+
+function Field({ label, hint, children }) {
+  return (
+    <label style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+      <span style={{ fontSize: 11, fontWeight: 700, color: C.navy, textTransform: 'uppercase', letterSpacing: 0.5 }}>
+        {label}
+      </span>
+      {children}
+      {hint && <span style={{ fontSize: 10, color: C.textMuted, fontStyle: 'italic' }}>{hint}</span>}
+    </label>
+  );
+}
+
+function CostRow({ label, enabled, onToggle, computed, hint, children }) {
+  return (
+    <div style={{
+      display: 'grid', gridTemplateColumns: '1.5fr 1fr auto', gap: 12,
+      alignItems: 'center', padding: '10px 12px',
+      background: enabled ? C.purpleLight : 'white',
+      border: `1px solid ${enabled ? C.purpleAccent : C.border}`, borderRadius: 6,
+    }}>
+      <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, cursor: 'pointer' }}>
+        <input type="checkbox" checked={enabled} onChange={e => onToggle(e.target.checked)}
+          style={{ accentColor: C.navy, width: 15, height: 15, cursor: 'pointer' }} />
+        <span style={{ color: C.navy, fontWeight: enabled ? 700 : 400 }}>{label}</span>
+      </label>
+      <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end', opacity: enabled ? 1 : 0.5 }}>
+        {children}
+      </div>
+      <div style={{ minWidth: 90, textAlign: 'right' }}>
+        <div style={{ fontWeight: 700, color: enabled ? C.navy : C.textMuted, fontSize: 13 }}>
+          {fmt$Full(computed)}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function NumberMini({ value, onChange, label, step = 1 }) {
+  return (
+    <label style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 1 }}>
+      <input type="number" value={value} step={step} min="0"
+        onChange={e => onChange(Number(e.target.value) || 0)}
+        style={{ ...inputStyle, padding: '4px 6px', width: 80, fontSize: 12, textAlign: 'right' }} />
+      <span style={{ fontSize: 9, color: C.textMuted }}>{label}</span>
+    </label>
+  );
+}
+
+function Row({ label, value, bold, muted }) {
+  return (
+    <div style={{
+      display: 'flex', justifyContent: 'space-between', alignItems: 'baseline',
+      padding: '4px 0', fontSize: 13,
+    }}>
+      <span style={{ color: muted ? C.textMuted : C.textPrimary, fontWeight: bold ? 700 : 400 }}>{label}</span>
+      <span style={{ color: muted ? C.textMuted : C.navy, fontWeight: bold ? 700 : 600, fontFamily: FONT }}>
+        {value}
+      </span>
+    </div>
+  );
+}
+
+function PricingTierRow({ label, rev, cost, active }) {
+  const margin = rev - cost;
+  const marginPct = rev > 0 ? (margin / rev) * 100 : 0;
+  return (
+    <div style={{
+      display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+      padding: '8px 10px', borderRadius: 6, marginBottom: 4,
+      background: active ? 'white' : 'transparent',
+      border: `1px solid ${active ? C.orange : 'transparent'}`,
+    }}>
+      <div>
+        <div style={{ fontSize: 11, fontWeight: 700, color: C.navy, textTransform: 'uppercase', letterSpacing: 0.5 }}>
+          {label} {active && <span style={{ color: C.orange }}>•</span>}
+        </div>
+        <div style={{ fontSize: 10, color: C.textMuted }}>
+          {fmt$(margin)} margin · {fmtPct(marginPct)}
+        </div>
+      </div>
+      <div style={{ fontWeight: 700, color: C.navy, fontSize: 15 }}>{fmt$(rev)}</div>
+    </div>
+  );
+}
+
+// ============================================================
+// Style tokens
+// ============================================================
+const inputStyle = {
+  fontFamily: FONT,
+  fontSize: 13,
+  padding: '7px 10px',
+  border: `1px solid ${C.border}`,
+  borderRadius: 6,
+  background: 'white',
+  color: C.textPrimary,
+  width: '100%',
+  outline: 'none',
+};
+
+const btnPrimaryStyle = {
+  display: 'inline-flex', alignItems: 'center', gap: 6,
+  background: C.orange, color: 'white', border: 'none',
+  padding: '8px 14px', borderRadius: 6, fontSize: 12,
+  fontWeight: 700, cursor: 'pointer', fontFamily: FONT,
+};
+
+const btnSecondaryStyle = {
+  display: 'inline-flex', alignItems: 'center', gap: 6,
+  background: 'rgba(255,255,255,0.1)', color: 'white',
+  border: '1px solid rgba(255,255,255,0.3)',
+  padding: '8px 14px', borderRadius: 6, fontSize: 12,
+  fontWeight: 700, cursor: 'pointer', fontFamily: FONT,
+};
+
+const btnGhostStyle = {
+  display: 'inline-flex', alignItems: 'center', gap: 6,
+  background: 'transparent', color: C.purpleDeep,
+  border: `1px solid ${C.border}`,
+  padding: '6px 10px', borderRadius: 6, fontSize: 11,
+  fontWeight: 700, cursor: 'pointer', fontFamily: FONT,
+};
